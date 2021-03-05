@@ -1,10 +1,12 @@
 extern crate serde;
 extern crate serde_json;
 
-use std::thread;
-use std::net::{TcpListener, TcpStream, Shutdown};
+use openssl::ssl::{SslMethod, SslAcceptor, SslStream, SslFiletype};
+use std::net::{TcpListener, TcpStream};
+use std::sync::Arc;
 use std::io::{Read, Write};
 use std::str::from_utf8;
+use std::thread;
 
 mod settings;
 mod sender;
@@ -44,20 +46,23 @@ impl Messager {
 }
 
 pub struct LogBalancer {
-    pub settings: Settings
+    pub settings: Settings,
+    pub transport_token_function: Option<fn(String) -> String>,
+    pub certificate_chain_file: String,
+    pub ca_file: String,
+    pub private_key_file: String,
 }
 impl LogBalancer {
-    fn handle_client(mut stream: TcpStream, settings: Settings) {
+    fn handle_client(mut receiver: SslStream<TcpStream>, settings: Settings, sender_cert: String) {
         let mut data = [0 as u8; 8192];
 
         let mut sender = Sender {dst_hosts: settings.dst_hosts, stream: None};
         let mut messager = Messager{ penultimate_last_line: String::from(""), complete: true };
 
-        sender.connect(true);
-
+        sender.connect(sender_cert, true);
 
         loop {
-            let message = match stream.read(&mut data) {
+            let message = match receiver.read(&mut data) {
                 Ok(size) => {
                     let message = match from_utf8(&data[0..size]) {
                         Ok(v)  => v,
@@ -66,7 +71,6 @@ impl LogBalancer {
                     message
                 },
                 Err(_)   => {
-                    println!("An error occurred, terminating connection with {}", stream.peer_addr().unwrap());
                     break
                 }
             };
@@ -92,23 +96,37 @@ impl LogBalancer {
             };
         }
         
-        stream.shutdown(Shutdown::Both).unwrap();
+        receiver.shutdown().unwrap();
     }
 
-    pub fn start(&self) {
-        let listener = TcpListener::bind(&self.settings.listen_host).unwrap();
 
-        println!("Server listening on {}", self.settings.listen_host);
+    pub fn start(&mut self) {
+        let mut acceptor = SslAcceptor::mozilla_intermediate_v5(SslMethod::tls_server()).unwrap();
+        acceptor.set_private_key_file(self.private_key_file.clone(), SslFiletype::PEM).unwrap();
+        acceptor.set_certificate_chain_file(self.certificate_chain_file.clone()).unwrap();
+        acceptor.check_private_key().unwrap();
+
+        if self.settings.node == true {
+            acceptor.set_ca_file(self.ca_file.clone()).unwrap();
+        }
+
+        let acceptor = Arc::new(acceptor.build());
+        let listener = TcpListener::bind(&self.settings.listen_host).unwrap();
+        
         for stream in listener.incoming() {
             let receiver = match stream {
                 Ok(stream) => stream,
                 Err(e) => panic!("Error: {}", e),
             };
-            println!("New connection: {}", receiver.peer_addr().unwrap());
+
+            let acceptor = acceptor.clone();
             let set = self.settings.clone();
-            thread::spawn(move|| {
-                LogBalancer::handle_client(receiver, set)
-            });                 
+            let sender_cert = self.ca_file.clone();
+
+            thread::spawn(move || {
+                let receiver = acceptor.accept(receiver).unwrap();
+                LogBalancer::handle_client(receiver, set, sender_cert)
+            });
         }
         drop(listener);
     }
