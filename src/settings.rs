@@ -3,7 +3,7 @@ use serde::Deserialize;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Handshake {
-    pub transport_token: String,
+    pub transport_token: Option<String>,
     pub success: bool
 }
 
@@ -17,7 +17,7 @@ pub struct Settings {
 
 impl Settings {
     pub fn sender_settings(listen_host: String, dst_hosts: Vec<String>) -> Settings {
-        let handshake = Handshake { success: false, transport_token: String::from("")};
+        let handshake = Handshake { success: false, transport_token: None};
         Settings {
             listen_host: listen_host,
             dst_hosts: dst_hosts,
@@ -27,7 +27,7 @@ impl Settings {
     }
 
     pub fn node_settings(listen_host: String, dst: String) -> Settings {
-        let handshake = Handshake { success: false, transport_token: String::from("")};
+        let handshake = Handshake { success: false, transport_token: None};
         let mut vec = Vec::new();
         vec.push(dst);
         Settings {
