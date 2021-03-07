@@ -15,7 +15,7 @@ logbalancer = {  git = "https://github.com/lukasbalazik123/rust-logbalancer"  }
 
 ## usage
 ### Sender
-```
+```rust
 extern crate logbalancer;
 
 use logbalancer::{LogBalancer, Settings};
@@ -44,7 +44,7 @@ fn main() {
 }
 ```
 ### Node
-```
+```rust
 extern crate logbalancer;
 
 use logbalancer::{LogBalancer, Settings};
