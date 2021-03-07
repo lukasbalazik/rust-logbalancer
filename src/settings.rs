@@ -7,6 +7,7 @@ pub struct Handshake {
     pub node_load: u8,
     pub node_memory: u8,
     pub success: bool,
+    pub initialized: bool,
 }
 
 #[derive(Clone)]
@@ -19,7 +20,7 @@ pub struct Settings {
 
 impl Settings {
     pub fn sender_settings(listen_host: String, dst_hosts: Vec<String>) -> Settings {
-        let handshake = Handshake { node_load: 0, node_memory: 0, success: false, transport_token: None};
+        let handshake = Handshake { node_load: 0, node_memory: 0, success: false, transport_token: None, initialized: false};
         Settings {
             listen_host: listen_host,
             dst_hosts: dst_hosts,
@@ -29,7 +30,7 @@ impl Settings {
     }
 
     pub fn node_settings(listen_host: String, dst: String) -> Settings {
-        let handshake = Handshake { node_load: 0, node_memory: 0, success: false, transport_token: None};
+        let handshake = Handshake { node_load: 0, node_memory: 0, success: false, transport_token: None, initialized: false};
         let mut vec = Vec::new();
         vec.push(dst);
         Settings {

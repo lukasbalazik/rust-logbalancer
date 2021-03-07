@@ -22,7 +22,7 @@ pub fn get_system_info(mut handshake: Handshake) -> Handshake {
 
 pub fn select_node(nodes: Vec<Node>) -> Node {
     let mut selected_node = Node {node: String::from(""), handshake:
-        Handshake { transport_token: None, success: false, node_load:255, node_memory: 255 }
+        Handshake { transport_token: None, success: false, node_load:255, node_memory: 255, initialized: false }
     };
     for node in nodes.iter() {
         println!("node: {}", node.node);

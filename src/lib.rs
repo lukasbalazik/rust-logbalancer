@@ -29,14 +29,35 @@ pub struct LogBalancer {
     pub private_key_file: String,
 }
 impl LogBalancer {
+
+    fn handshake_initialize(message: &str) -> Handshake {
+        let mut handshake: Handshake = match serde_json::from_str(&message) {
+            Ok(h) => h,
+            Err(_) => panic!("Cant read handshake from message"), 
+        };
+        if handshake.initialized != true {
+            handshake = balancer::get_system_info(handshake.clone());
+            handshake.initialized = true; 
+        } 
+        handshake
+    }
+
+
     fn handle_client(mut receiver: SslStream<TcpStream>, settings: Settings, sender_cert: String) {
         let mut data = [0 as u8; 8192];
 
-        let mut sender = Sender {dst_hosts: settings.dst_hosts, stream: None, node: settings.node};
+        let mut sender = Sender {dst_hosts: settings.dst_hosts, stream: None, node: settings.node, selected_node: None };
+        let mut handshake = Handshake { transport_token: None, success: false, node_load: 0, node_memory: 0, initialized: false };
         let mut messager = Messager { penultimate_last_line: String::from(""), complete: true };
-        let mut handshake = Handshake { transport_token: None, success: false, node_load: 0, node_memory: 0 };
 
-        sender.connect(sender_cert);
+        loop {
+            sender.connect(sender_cert.clone());
+            if settings.node != true && sender.check_node() != true {
+                println!("Node is not initiliazed or did not end successfuly reconnecting");
+                continue
+            }
+            break
+        }
 
         loop {
             let message = match receiver.read(&mut data) {
@@ -44,39 +65,36 @@ impl LogBalancer {
                 Err(_)   => break,
             };
 
+            if message.eq("") {
+                break;
+            }
+
             if settings.node == true && handshake.success != true {
-                // TODO this to separate function so users can program own handshake
-                handshake = match serde_json::from_str(&message) {
-                    Ok(h) => h,
-                    Err(_) => break, 
-                };
-                if handshake.success != true {
-                    let enriched_handshake  = balancer::get_system_info(handshake.clone());
-                    let enriched_handshake_serialized = serde_json::to_string(&enriched_handshake).unwrap();
-                    receiver.write(enriched_handshake_serialized.as_bytes()).unwrap();
+                handshake = LogBalancer::handshake_initialize(message);
+                if handshake.initialized != true {
+                    break;
                 }
+                
+                let handshake_serialized = serde_json::to_string(&handshake).unwrap();
+                receiver.write(handshake_serialized.as_bytes()).unwrap();
+                
                 continue;
             }
 
-            match message {
-                "" => break,
-                _  => {
-                    let corrected_message = messager.corrector(message);
-                    let last_message: usize = corrected_message.lines().count();
+            let corrected_message = messager.corrector(message);
+            let last_message: usize = corrected_message.lines().count();
 
-                    let mut lines = corrected_message.lines();
-                    let mut counter: usize = 1;
-                    
-                    while let Some(line) = lines.next() {
-                        if counter == last_message && messager.complete != true {
-                            messager.set_penultimate_last_line(String::from(line));
-                        } else {
-                                sender.write(line.to_string());
-                        }
-                        counter += 1
-                    }
-                },
-            };
+            let mut lines = corrected_message.lines();
+            let mut counter: usize = 1;
+            
+            while let Some(line) = lines.next() {
+                if counter == last_message && messager.complete != true {
+                    messager.set_penultimate_last_line(String::from(line));
+                } else {
+                        sender.write(line.to_string());
+                }
+                counter += 1
+            }
         }
     }
 
