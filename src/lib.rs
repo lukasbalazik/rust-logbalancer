@@ -1,5 +1,6 @@
 extern crate serde;
 extern crate serde_json;
+extern crate sys_info;
 
 use openssl::ssl::{SslMethod, SslAcceptor, SslStream, SslFiletype};
 use std::net::{TcpListener, TcpStream};
@@ -8,42 +9,17 @@ use std::io::{Read, Write};
 use std::str::from_utf8;
 use std::thread;
 
-mod settings;
+mod balancer;
+mod messager;
 mod sender;
+mod settings;
 
+use messager::Messager;
 use sender::Sender;
 
 pub use settings::Settings;
 pub use settings::Handshake;
 
-
-struct Messager {
-    penultimate_last_line: String,
-    complete: bool,
-}
-impl Messager {
-    fn correctmessage(&mut self, received: String) -> String {
-        let mut _message: String = "".to_owned();
-        if self.complete != true { 
-            _message.push_str(&self.penultimate_last_line);
-        }
-        _message.push_str(&received);
-
-        if _message.chars().last().unwrap() != '\n' {
-            self.complete = false;
-        } else {
-            self.complete = true;
-        }
-
-        _message
-    }
-
-    fn set_penultimate_last_line(&mut self, line: String) {
-        self.penultimate_last_line = line;
-    }
-
-
-}
 
 pub struct LogBalancer {
     pub settings: Settings,
@@ -56,29 +32,36 @@ impl LogBalancer {
     fn handle_client(mut receiver: SslStream<TcpStream>, settings: Settings, sender_cert: String) {
         let mut data = [0 as u8; 8192];
 
-        let mut sender = Sender {dst_hosts: settings.dst_hosts, stream: None};
-        let mut messager = Messager{ penultimate_last_line: String::from(""), complete: true };
+        let mut sender = Sender {dst_hosts: settings.dst_hosts, stream: None, node: settings.node};
+        let mut messager = Messager { penultimate_last_line: String::from(""), complete: true };
+        let mut handshake = Handshake { transport_token: None, success: false, node_load: 0, node_memory: 0 };
 
-        sender.connect(sender_cert, true);
+        sender.connect(sender_cert);
 
         loop {
             let message = match receiver.read(&mut data) {
-                Ok(size) => {
-                    let message = match from_utf8(&data[0..size]) {
-                        Ok(v)  => v,
-                        Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
-                    };
-                    message
-                },
-                Err(_)   => {
-                    break
-                }
+                Ok(size) => from_utf8(&data[0..size]).unwrap(),
+                Err(_)   => break,
             };
+
+            if settings.node == true && handshake.success != true {
+                // TODO this to separate function so users can program own handshake
+                handshake = match serde_json::from_str(&message) {
+                    Ok(h) => h,
+                    Err(_) => break, 
+                };
+                if handshake.success != true {
+                    let enriched_handshake  = balancer::get_system_info(handshake.clone());
+                    let enriched_handshake_serialized = serde_json::to_string(&enriched_handshake).unwrap();
+                    receiver.write(enriched_handshake_serialized.as_bytes()).unwrap();
+                }
+                continue;
+            }
 
             match message {
                 "" => break,
                 _  => {
-                    let corrected_message = messager.correctmessage(message.to_string());
+                    let corrected_message = messager.corrector(message);
                     let last_message: usize = corrected_message.lines().count();
 
                     let mut lines = corrected_message.lines();
@@ -95,8 +78,6 @@ impl LogBalancer {
                 },
             };
         }
-        
-        receiver.shutdown().unwrap();
     }
 
 
@@ -106,12 +87,9 @@ impl LogBalancer {
         acceptor.set_certificate_chain_file(self.certificate_chain_file.clone()).unwrap();
         acceptor.check_private_key().unwrap();
 
-        if self.settings.node == true {
-            acceptor.set_ca_file(self.ca_file.clone()).unwrap();
-        }
-
         let acceptor = Arc::new(acceptor.build());
         let listener = TcpListener::bind(&self.settings.listen_host).unwrap();
+
         
         for stream in listener.incoming() {
             let receiver = match stream {
