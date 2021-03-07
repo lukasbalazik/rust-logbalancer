@@ -98,13 +98,14 @@ impl Sender {
         }
     }
     
-    pub fn write(&mut self, mut message: String) {
+    pub fn write(&mut self, mut message: String) -> bool {
         if let Some(ref mut stream) = self.stream {
             message.push_str("\n");
             stream.write(message.as_bytes()).unwrap();
+            return true;
         } else {
             println!("Sending stream not inicialized");
         }
-        
+        false
     }
 }

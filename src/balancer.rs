@@ -30,8 +30,7 @@ pub fn select_node(nodes: Vec<Node>) -> Node {
         println!("node_memory: {}", node.handshake.node_memory);
         if node.handshake.node_load < selected_node.handshake.node_load && node.handshake.node_memory > 5 {
             selected_node = Node {node: node.node.clone(), handshake: node.handshake.clone() };
-        }
-        
+        } 
     }
     selected_node.handshake.success = true;
     selected_node

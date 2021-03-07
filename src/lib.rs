@@ -42,22 +42,26 @@ impl LogBalancer {
         handshake
     }
 
-
-    fn handle_client(mut receiver: SslStream<TcpStream>, settings: Settings, sender_cert: String) {
-        let mut data = [0 as u8; 8192];
-
+    fn sender_initialize(settings: Settings, ca_file: &String) -> Sender {
         let mut sender = Sender {dst_hosts: settings.dst_hosts, stream: None, node: settings.node, selected_node: None };
-        let mut handshake = Handshake { transport_token: None, success: false, node_load: 0, node_memory: 0, initialized: false };
-        let mut messager = Messager { penultimate_last_line: String::from(""), complete: true };
-
         loop {
-            sender.connect(sender_cert.clone());
+            sender.connect(ca_file.clone());
             if settings.node != true && sender.check_node() != true {
                 println!("Node is not initiliazed or did not end successfuly reconnecting");
                 continue
             }
             break
         }
+        sender
+    }
+
+    fn handle_client(mut receiver: SslStream<TcpStream>, settings: Settings, ca_file: String) {
+        let mut data = [0 as u8; 8192];
+
+        let mut handshake = settings.handshake.clone();
+        let mut sender = LogBalancer::sender_initialize(settings.clone(), &ca_file);
+        let mut messager = Messager { penultimate_last_line: String::from(""), complete: true };
+
 
         loop {
             let message = match receiver.read(&mut data) {
@@ -91,7 +95,9 @@ impl LogBalancer {
                 if counter == last_message && messager.complete != true {
                     messager.set_penultimate_last_line(String::from(line));
                 } else {
-                        sender.write(line.to_string());
+                    while sender.write(line.to_string()) != true {
+                        sender = LogBalancer::sender_initialize(settings.clone(), &ca_file);
+                    }
                 }
                 counter += 1
             }
