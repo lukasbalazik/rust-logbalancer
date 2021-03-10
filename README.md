@@ -25,8 +25,8 @@ fn main() {
     let key = String::from("key.pem");
     // sender signed cert (for receiving from first log server for example syslog-ng)
     let certificate = String::from("cert.pem");
-    // ca cert (ca from logbalancer node)
-    let ca_certificate = String::from("cacert.pem");
+    // ca cert (ca from logbalancer node) "Some" becouse its Option<String>
+    let ca_certificate = Some(String::from("cacert.pem"));
     let listen_host = String::from("127.0.0.1:3333");
 
     let mut dst_hosts = Vec::new();
@@ -35,7 +35,7 @@ fn main() {
 
     let mut logbalancer = LogBalancer {
         settings: Settings::sender_settings(String::from("logbalancer-sender:12345"), dst_hosts),
-        transport_token_function: None,
+        custom_handshake_initialize: None,
         private_key_file: key,
         certificate_chain_file: certificate,
         ca_file: ca_certificate,
@@ -54,13 +54,13 @@ fn main() {
     let key = String::from("key.pem");
     // node signed cert
     let certificate = String::from("cert.pem");
-    // ca cert (ca from dest logging server for example syslog-ng)
-    let ca_certificate = String::from("cacert.pem");
+    // ca cert (ca from dest logging server for example syslog-ng) "Some" becouse its Option<String>
+    let ca_certificate = Some(String::from("cacert.pem"));
     let listen_host = String::from("127.0.0.1:3333");
 
     let mut logbalancer = LogBalancer {
         settings: Settings::node_settings(String::from(listen_host), String::from("192.168.0.24:514")),
-        transport_token_function: None,
+        custom_handshake_initialize: None,
         private_key_file: key,
         certificate_chain_file: certificate,
         ca_file: ca_certificate,
