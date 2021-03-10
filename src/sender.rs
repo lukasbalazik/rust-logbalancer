@@ -60,11 +60,14 @@ impl Sender {
         false
     }
 
-    pub fn connect(&mut self, cert: String) {
+    pub fn connect(&mut self, ca_file: Option<String>) {
         let mut builder = SslConnector::builder(SslMethod::tls_client()).unwrap();
         // FIX: Hostname mismach maybe becouse im testing on localhost, have to fix later 
         builder.set_verify(SslVerifyMode::NONE);
-        builder.set_certificate_chain_file(cert.clone()).unwrap();
+        
+        if let Some(ref ca_file) = ca_file {
+            builder.set_ca_file(ca_file.clone()).unwrap();
+        }
         let connector = builder.build();
         
 

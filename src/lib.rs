@@ -23,10 +23,10 @@ pub use settings::Handshake;
 
 pub struct LogBalancer {
     pub settings: Settings,
-    pub transport_token_function: Option<fn(String) -> String>,
+    pub custom_handshake_initialize: Option<fn(String) -> String>,
     pub certificate_chain_file: String,
-    pub ca_file: String,
     pub private_key_file: String,
+    pub ca_file: Option<String>,
 }
 impl LogBalancer {
 
@@ -42,7 +42,7 @@ impl LogBalancer {
         handshake
     }
 
-    fn sender_initialize(settings: Settings, ca_file: &String) -> Sender {
+    fn sender_initialize(settings: Settings, ca_file: Option<String>) -> Sender {
         let mut sender = Sender {dst_hosts: settings.dst_hosts, stream: None, node: settings.node, selected_node: None };
         loop {
             sender.connect(ca_file.clone());
@@ -55,11 +55,11 @@ impl LogBalancer {
         sender
     }
 
-    fn handle_client(mut receiver: SslStream<TcpStream>, settings: Settings, ca_file: String) {
+    fn handle_client(mut receiver: SslStream<TcpStream>, settings: Settings, ca_file: Option<String>) {
         let mut data = [0 as u8; 8192];
 
         let mut handshake = settings.handshake.clone();
-        let mut sender = LogBalancer::sender_initialize(settings.clone(), &ca_file);
+        let mut sender = LogBalancer::sender_initialize(settings.clone(), ca_file.clone());
         let mut messager = Messager { penultimate_last_line: String::from(""), complete: true };
 
 
@@ -96,7 +96,7 @@ impl LogBalancer {
                     messager.set_penultimate_last_line(String::from(line));
                 } else {
                     while sender.write(line.to_string()) != true {
-                        sender = LogBalancer::sender_initialize(settings.clone(), &ca_file);
+                        sender = LogBalancer::sender_initialize(settings.clone(), ca_file.clone());
                     }
                 }
                 counter += 1
