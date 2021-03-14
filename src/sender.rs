@@ -19,21 +19,29 @@ impl Sender {
     fn get_node_health(&self, connector: SslConnector, node: &str) -> Handshake {
         let mut data = [0 as u8; 8192];
         let handshake = Handshake {node_load: 0, node_memory: 0, initialized: false, success: false, transport_token: None};
-        let sender_stream = TcpStream::connect(node).unwrap();
-        let mut stream = connector.connect(node, sender_stream).unwrap();
-        
-        let handshake_serialized = serde_json::to_string(&handshake).unwrap();
-        stream.write(handshake_serialized.as_bytes()).unwrap();
-
-        //TODO Timeout on read
-        let handshake_serialized = match stream.read(&mut data) {
-            Ok(size) => from_utf8(&data[0..size]).unwrap(),
-            Err(_)   => "" 
+        let sender_stream: Option<TcpStream> = match TcpStream::connect(node) {
+            Ok(v) => Some(v),
+            Err(_) => None
         };
-        if handshake_serialized.eq("") {
+        
+        if let Some(ref sender_stream) = sender_stream {
+            let mut stream = connector.connect(node, sender_stream).unwrap();
+            
+            let handshake_serialized = serde_json::to_string(&handshake).unwrap();
+            stream.write(handshake_serialized.as_bytes()).unwrap();
+
+            //TODO Timeout on read
+            let handshake_serialized = match stream.read(&mut data) {
+                Ok(size) => from_utf8(&data[0..size]).unwrap(),
+                Err(_)   => "" 
+            };
+            if handshake_serialized.eq("") {
+                return handshake;
+            }
+            return serde_json::from_str(&handshake_serialized).unwrap();
+        } else {
             return handshake;
         }
-        serde_json::from_str(&handshake_serialized).unwrap()
     }
 
     pub fn check_node(&mut self) -> bool {
