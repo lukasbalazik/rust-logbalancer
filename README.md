@@ -36,6 +36,7 @@ fn main() {
     let mut logbalancer = LogBalancer {
         settings: Settings::sender_settings(String::from("logbalancer-sender:12345"), dst_hosts),
         custom_handshake_initialize: None,
+        custom_update_dst_hosts: None,
         private_key_file: key,
         certificate_chain_file: certificate,
         ca_file: ca_certificate,
@@ -61,6 +62,7 @@ fn main() {
     let mut logbalancer = LogBalancer {
         settings: Settings::node_settings(String::from(listen_host), String::from("192.168.0.24:514")),
         custom_handshake_initialize: None,
+        custom_update_dst_hosts: None,
         private_key_file: key,
         certificate_chain_file: certificate,
         ca_file: ca_certificate,
