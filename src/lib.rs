@@ -25,6 +25,7 @@ pub use settings::Handshake;
 pub struct LogBalancer {
     pub settings: Settings,
     pub custom_handshake_initialize: Option<fn(&str) -> Handshake>,
+    pub custom_update_dst_hosts: Option<fn(String) -> Vec<String>>,
     pub certificate_chain_file: String,
     pub private_key_file: String,
     pub ca_file: Option<String>,
@@ -79,8 +80,8 @@ impl LogBalancer {
 
             if settings.node == true && handshake.success != true {
                 
-                if let Some(ref func) = self_struct.custom_handshake_initialize {
-                    handshake = func(message);
+                if let Some(ref handshake_initialize) = self_struct.custom_handshake_initialize {
+                    handshake = handshake_initialize(message);
                 }
                 if handshake.initialized != true {
                     break;
@@ -111,7 +112,6 @@ impl LogBalancer {
         }
     }
 
-
     pub fn start(&mut self) {
         let mut acceptor = SslAcceptor::mozilla_intermediate_v5(SslMethod::tls_server()).unwrap();
         acceptor.set_private_key_file(self.private_key_file.clone(), SslFiletype::PEM).unwrap();
@@ -126,12 +126,18 @@ impl LogBalancer {
         }
         
         for stream in listener.incoming() {
+            if let Some(ref mut update_dst_hosts) = self.custom_update_dst_hosts {
+                if let Some(ref mut token) = self.settings.handshake.transport_token {
+                    self.settings.dst_hosts = update_dst_hosts(token.to_string());
+                }
+            }
             let receiver = match stream {
                 Ok(stream) => stream,
                 Err(e) => panic!("Error: {}", e),
             };
 
             let acceptor = acceptor.clone();
+
             let self_struct = self.clone();
 
             thread::spawn(move || {
