@@ -25,9 +25,11 @@ pub fn select_node(nodes: Vec<Node>) -> Node {
         Handshake { transport_token: None, success: false, node_load:255, node_memory: 255, initialized: false }
     };
     for node in nodes.iter() {
+        /* print node stats
         println!("node: {}", node.node);
         println!("node_load: {}", node.handshake.node_load);
         println!("node_memory: {}", node.handshake.node_memory);
+        */
         if node.handshake.node_load < selected_node.handshake.node_load && node.handshake.node_memory > 5 {
             selected_node = Node {node: node.node.clone(), handshake: node.handshake.clone() };
         } 

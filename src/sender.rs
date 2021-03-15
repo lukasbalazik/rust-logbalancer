@@ -13,12 +13,13 @@ pub struct Sender {
     pub dst_hosts: Vec<String>,
     pub stream: Option<SslStream<TcpStream>>,
     pub selected_node: Option<Node>,
+    pub handshake: Handshake,
     pub node: bool,
 }
 impl Sender {
     fn get_node_health(&self, connector: SslConnector, node: &str) -> Handshake {
         let mut data = [0 as u8; 8192];
-        let handshake = Handshake {node_load: 0, node_memory: 0, initialized: false, success: false, transport_token: None};
+        let handshake = self.handshake.clone();
         let sender_stream: Option<TcpStream> = match TcpStream::connect(node) {
             Ok(v) => Some(v),
             Err(_) => None
@@ -98,13 +99,19 @@ impl Sender {
                 let node = Node {handshake: handshake, node: dst.to_string()};
                 nodes.push(node);
             }
+
             if nodes.len() == 0 {
                 println!("Handshake did not success on any of destination nodes");
             } else {
                 let node = balancer::select_node(nodes);
-                let sender_stream = TcpStream::connect(&node.node).unwrap();
-                self.stream = Some(connector.connect(&node.node, sender_stream).unwrap());
-                self.selected_node = Some(node);
+                if node.node.eq("") {
+                    println!("All nodes are unavailable due to congestion");
+                } else {
+                    println!("Selected Node: {}", node.node);
+                    let sender_stream = TcpStream::connect(&node.node).unwrap();
+                    self.stream = Some(connector.connect(&node.node, sender_stream).unwrap());
+                    self.selected_node = Some(node);
+                }
             }
         }
     }

@@ -8,8 +8,9 @@ use std::sync::Arc;
 use std::io::{Read, Write};
 use std::str::from_utf8;
 use std::thread;
+use std::time;
 
-mod balancer;
+pub mod balancer;
 mod messager;
 mod sender;
 mod settings;
@@ -20,10 +21,10 @@ use sender::Sender;
 pub use settings::Settings;
 pub use settings::Handshake;
 
-
+#[derive(Clone)]
 pub struct LogBalancer {
     pub settings: Settings,
-    pub custom_handshake_initialize: Option<fn(String) -> String>,
+    pub custom_handshake_initialize: Option<fn(&str) -> Handshake>,
     pub certificate_chain_file: String,
     pub private_key_file: String,
     pub ca_file: Option<String>,
@@ -43,11 +44,13 @@ impl LogBalancer {
     }
 
     fn sender_initialize(settings: Settings, ca_file: Option<String>) -> Sender {
-        let mut sender = Sender {dst_hosts: settings.dst_hosts, stream: None, node: settings.node, selected_node: None };
+        let mut sender = Sender {dst_hosts: settings.dst_hosts, stream: None, node: settings.node, selected_node: None, handshake: settings.handshake };
+        let sleep_time = time::Duration::from_millis(10000);
         loop {
             sender.connect(ca_file.clone());
             if settings.node != true && sender.check_node() != true {
                 println!("Node is not initiliazed or did not end successfuly reconnecting");
+                thread::sleep(sleep_time);
                 continue
             }
             break
@@ -55,13 +58,14 @@ impl LogBalancer {
         sender
     }
 
-    fn handle_client(mut receiver: SslStream<TcpStream>, settings: Settings, ca_file: Option<String>) {
+    fn handle_client(mut receiver: SslStream<TcpStream>, self_struct: LogBalancer) {
         let mut data = [0 as u8; 8192];
+        let ca_file = self_struct.ca_file;
+        let settings = self_struct.settings;
 
         let mut handshake = settings.handshake.clone();
         let mut sender = LogBalancer::sender_initialize(settings.clone(), ca_file.clone());
         let mut messager = Messager { penultimate_last_line: String::from(""), complete: true };
-
 
         loop {
             let message = match receiver.read(&mut data) {
@@ -74,7 +78,10 @@ impl LogBalancer {
             }
 
             if settings.node == true && handshake.success != true {
-                handshake = LogBalancer::handshake_initialize(message);
+                
+                if let Some(ref func) = self_struct.custom_handshake_initialize {
+                    handshake = func(message);
+                }
                 if handshake.initialized != true {
                     break;
                 }
@@ -114,6 +121,9 @@ impl LogBalancer {
         let acceptor = Arc::new(acceptor.build());
         let listener = TcpListener::bind(&self.settings.listen_host).unwrap();
 
+        if self.custom_handshake_initialize.is_none() {
+            self.custom_handshake_initialize = Some(LogBalancer::handshake_initialize);
+        }
         
         for stream in listener.incoming() {
             let receiver = match stream {
@@ -122,14 +132,16 @@ impl LogBalancer {
             };
 
             let acceptor = acceptor.clone();
-            let set = self.settings.clone();
-            let sender_cert = self.ca_file.clone();
+            let self_struct = self.clone();
 
             thread::spawn(move || {
                 let receiver = acceptor.accept(receiver).unwrap();
-                LogBalancer::handle_client(receiver, set, sender_cert)
+                LogBalancer::handle_client(receiver, self_struct)
             });
         }
         drop(listener);
     }
 }
+
+
+
