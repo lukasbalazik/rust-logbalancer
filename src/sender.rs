@@ -118,6 +118,11 @@ impl Sender {
     
     pub fn write(&mut self, mut message: String) -> bool {
         if let Some(ref mut stream) = self.stream {
+            if let Some(ref mut node) = self.selected_node {
+                if node.handshake.additional.len() > 0 {
+                    message.push_str(&node.handshake.additional);
+                }
+            }
             message.push_str("\n");
             stream.write(message.as_bytes()).unwrap();
             return true;

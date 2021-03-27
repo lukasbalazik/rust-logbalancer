@@ -103,7 +103,7 @@ impl LogBalancer {
                 if counter == last_message && messager.complete != true {
                     messager.set_penultimate_last_line(String::from(line));
                 } else {
-                    while sender.write(line.to_string()) != true {
+                    if sender.write(line.to_string()) != true {
                         sender = LogBalancer::sender_initialize(settings.clone(), ca_file.clone());
                     }
                 }
